@@ -6,6 +6,7 @@
 <title>Kasir Seblak Prasmanan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;0,800;1,700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --char:#241512;
@@ -387,6 +388,19 @@
     opacity:0.4;
     cursor:not-allowed;
   }
+  .btn-link-fallback{
+    display:block;
+    width:100%;
+    margin-top:8px;
+    background:none;
+    border:none;
+    color:rgba(255,248,240,0.45);
+    font-size:11.5px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:2px;
+  }
+  .btn-link-fallback:disabled{opacity:0.3; cursor:not-allowed;}
   .pending-badge{
     background:var(--turmeric);
     color:var(--char);
@@ -473,6 +487,7 @@
   }
   .oa-load{background:var(--turmeric); color:var(--char);}
   .oa-pay{background:var(--herb); color:#fff;}
+  .oa-share{background:var(--chili); color:#fff;}
   .oa-reprint{background:var(--char); color:var(--cream);}
   .oa-del{background:none; color:var(--chili); font-size:15px; padding:6px 8px;}
   .history-empty{
@@ -719,7 +734,8 @@
           <span id="changeAmt">Rp 0</span>
         </div>
         <button class="btn-secondary" id="saveOrderBtn" disabled>💾 Simpan Pesanan (Belum Bayar)</button>
-        <button class="btn-primary" id="payPrintBtn" disabled>✅ Bayar &amp; Cetak Struk</button>
+        <button class="btn-primary" id="payPrintBtn" disabled>✅ Bayar &amp; Buat Struk</button>
+        <button class="btn-link-fallback" id="fallbackPrintBtn" disabled>🖨️ atau cetak biasa (AirPrint/USB)</button>
       </div>
     </div>
   </div>
@@ -870,6 +886,7 @@ let orders = loadOrders();
 let cart = {}; // id -> qty
 let activeCat = 'Semua';
 let historyFilter = 'Semua';
+let lastPaidOrder = null;
 
 /* =========================================================
    HELPERS
@@ -1017,6 +1034,7 @@ function renderCart(){
   document.getElementById('grandTotal').textContent = rupiah(grand);
   document.getElementById('saveOrderBtn').disabled = ids.length===0;
   document.getElementById('payPrintBtn').disabled = ids.length===0;
+  document.getElementById('fallbackPrintBtn').disabled = ids.length===0;
 
   updateChange(grand);
 }
@@ -1074,7 +1092,8 @@ document.getElementById('saveOrderBtn').addEventListener('click', ()=>{
   showToast(`Pesanan ${order.no} disimpan (belum bayar)`);
 });
 
-// "Bayar & Cetak Struk" -> langsung dianggap lunas, cetak struk
+// "Bayar & Buat Struk" -> lunas, lalu buat gambar struk untuk dibagikan/disimpan
+// (dipakai untuk printer Bluetooth non-AirPrint seperti VSC di iPhone)
 document.getElementById('payPrintBtn').addEventListener('click', ()=>{
   if(!Object.keys(cart).length) return;
   const paid = Number(document.getElementById('paidInput').value || 0);
@@ -1091,9 +1110,19 @@ document.getElementById('payPrintBtn').addEventListener('click', ()=>{
   };
   orders.unshift(order);
   saveOrders(orders);
-  printOrder(order);
+  lastPaidOrder = order;
+  shareReceiptImage(order);
   clearCart();
   updatePendingBadge();
+});
+
+// Tombol cadangan: cetak lewat dialog print biasa (hanya jalan untuk printer AirPrint/USB)
+document.getElementById('fallbackPrintBtn').addEventListener('click', ()=>{
+  if(lastPaidOrder){
+    printOrder(lastPaidOrder);
+  } else {
+    showToast('Belum ada struk yang dibuat. Klik "Bayar & Buat Struk" dulu.');
+  }
 });
 
 function buildReceiptFromOrder(order){
@@ -1138,6 +1167,57 @@ function buildReceiptFromOrder(order){
 function printOrder(order){
   document.getElementById('receipt').innerHTML = buildReceiptFromOrder(order);
   window.print();
+}
+
+// Buat struk sebagai GAMBAR lalu bagikan lewat share sheet iOS/Android,
+// atau download kalau share tidak tersedia. Ini jalan buat printer Bluetooth
+// murah (VSC, dll) yang tidak terdeteksi di dialog print bawaan browser/AirPrint —
+// gambarnya tinggal dibuka dari app printer (mis. app bawaan VSC) untuk dicetak.
+async function shareReceiptImage(order){
+  if(typeof html2canvas === 'undefined'){
+    showToast('Gagal memuat komponen gambar. Cek koneksi internet lalu coba lagi.');
+    return;
+  }
+  const holder = document.createElement('div');
+  holder.style.position = 'fixed';
+  holder.style.left = '-9999px';
+  holder.style.top = '0';
+  holder.style.background = '#ffffff';
+  holder.style.padding = '10px';
+  holder.innerHTML = buildReceiptFromOrder(order);
+  document.body.appendChild(holder);
+
+  let blob = null;
+  try{
+    const canvas = await html2canvas(holder, { backgroundColor:'#ffffff', scale:3 });
+    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }catch(err){
+    showToast('Gagal membuat gambar struk');
+  }
+  document.body.removeChild(holder);
+  if(!blob){ showToast('Gagal membuat gambar struk'); return; }
+
+  const file = new File([blob], `struk-${order.no}.png`, { type:'image/png' });
+
+  if(navigator.canShare && navigator.canShare({ files:[file] })){
+    try{
+      await navigator.share({ files:[file], title: order.no, text:`Struk ${order.customer} - ${order.no}` });
+      return;
+    }catch(err){
+      if(err && err.name === 'AbortError') return; // dibatalkan user, tidak perlu fallback
+    }
+  }
+
+  // Fallback: unduh gambarnya kalau share sheet tidak tersedia
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `struk-${order.no}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Gambar struk tersimpan. Buka app printer VSC lalu pilih gambar ini untuk dicetak.');
 }
 
 /* =========================================================
@@ -1210,7 +1290,7 @@ function renderHistoryList(){
         </div>
         <div class="ototal">${rupiah(o.total)}</div>
         <div class="order-actions">
-          ${isPending ? `<button class="oa-load">Muat</button><button class="oa-pay">Bayar</button>` : `<button class="oa-reprint">Cetak Ulang</button>`}
+          ${isPending ? `<button class="oa-load">Muat</button><button class="oa-pay">Bayar</button>` : `<button class="oa-share">📷 Bagikan</button><button class="oa-reprint" title="Cetak biasa (AirPrint/USB)">🖨️</button>`}
           <button class="oa-del" title="Hapus">🗑️</button>
         </div>
       </div>
@@ -1221,10 +1301,15 @@ function renderHistoryList(){
     const id = row.dataset.id;
     const loadBtn = row.querySelector('.oa-load');
     const payBtn = row.querySelector('.oa-pay');
+    const shareBtn = row.querySelector('.oa-share');
     const reprintBtn = row.querySelector('.oa-reprint');
     const delBtn = row.querySelector('.oa-del');
     if(loadBtn) loadBtn.addEventListener('click', ()=>loadOrderIntoCart(id));
     if(payBtn) payBtn.addEventListener('click', ()=>payPendingOrder(id));
+    if(shareBtn) shareBtn.addEventListener('click', ()=>{
+      const o = orders.find(x=>x.id===id);
+      if(o) shareReceiptImage(o);
+    });
     if(reprintBtn) reprintBtn.addEventListener('click', ()=>{
       const o = orders.find(x=>x.id===id);
       if(o) printOrder(o);
@@ -1270,7 +1355,8 @@ function payPendingOrder(id){
   saveOrders(orders);
   renderHistoryList();
   updatePendingBadge();
-  printOrder(o);
+  lastPaidOrder = o;
+  shareReceiptImage(o);
   showToast(`Pesanan ${o.no} ditandai lunas`);
 }
 
