@@ -197,6 +197,28 @@
     color:var(--chili);
   }
   .item-card.flash{animation:flash .35s ease;}
+  .item-card.in-cart{
+    border-color:var(--chili);
+    box-shadow:0 0 0 2px rgba(198,46,31,0.25);
+  }
+  .item-card .qty-badge{
+    position:absolute;
+    top:8px;
+    right:8px;
+    min-width:24px;
+    height:24px;
+    padding:0 6px;
+    border-radius:999px;
+    background:var(--chili);
+    color:#fff;
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    font-size:13px;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 2px 6px rgba(198,46,31,0.4);
+  }
   @keyframes flash{
     0%{background:var(--turmeric);}
     100%{background:var(--cream);}
@@ -933,7 +955,9 @@ function renderGrid(){
   const grid = document.getElementById('grid');
   const label = document.getElementById('sectionLabel');
   const count = document.getElementById('itemCount');
-  const list = activeCat === 'Semua' ? items : items.filter(i=>i.cat===activeCat);
+  const list = (activeCat === 'Semua' ? items : items.filter(i=>i.cat===activeCat))
+    .slice()
+    .sort((a,b)=>a.name.localeCompare(b.name, 'id', {sensitivity:'base'}));
 
   label.textContent = activeCat === 'Semua' ? 'Semua Barang' : activeCat;
   count.textContent = list.length ? `${list.length} barang` : '';
@@ -945,11 +969,14 @@ function renderGrid(){
 
   grid.innerHTML = list.map(it=>`
     <div class="item-card" data-id="${it.id}">
+      <span class="qty-badge">0</span>
       <span class="badge">${escapeHtml(it.cat)}</span>
       <div class="iname">${escapeHtml(it.name)}</div>
       <div class="iprice">${rupiah(it.price)}</div>
     </div>
   `).join('');
+
+  updateGridBadges();
 
   grid.querySelectorAll('.item-card').forEach(card=>{
     card.addEventListener('click', ()=>{
@@ -964,6 +991,23 @@ function renderGrid(){
 /* =========================================================
    CART
    ========================================================= */
+function updateGridBadges(){
+  document.querySelectorAll('#grid .item-card').forEach(card=>{
+    const id = card.dataset.id;
+    const qty = cart[id] || 0;
+    const badge = card.querySelector('.qty-badge');
+    if(!badge) return;
+    if(qty > 0){
+      badge.textContent = qty;
+      badge.style.display = 'flex';
+      card.classList.add('in-cart');
+    } else {
+      badge.style.display = 'none';
+      card.classList.remove('in-cart');
+    }
+  });
+}
+
 function addToCart(id){
   cart[id] = (cart[id]||0) + 1;
   renderCart();
@@ -1037,6 +1081,7 @@ function renderCart(){
   document.getElementById('fallbackPrintBtn').disabled = ids.length===0;
 
   updateChange(grand);
+  updateGridBadges();
 }
 
 function updateChange(grandOverride){
@@ -1398,7 +1443,8 @@ function renderManageList(){
     return;
   }
   const cats = getCategories();
-  wrap.innerHTML = items.map(it=>`
+  const sortedItems = items.slice().sort((a,b)=>a.name.localeCompare(b.name, 'id', {sensitivity:'base'}));
+  wrap.innerHTML = sortedItems.map(it=>`
     <div class="manage-row" data-id="${it.id}">
       <input type="text" class="m-name" value="${escapeAttr(it.name)}">
       <select class="m-cat">
