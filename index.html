@@ -9,16 +9,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
-    --char:#241512;
-    --char-2:#3a2420;
-    --cream:#FFF8F0;
-    --cream-dim:#F3E7D8;
-    --chili:#C62E1F;
-    --chili-dark:#9C2116;
-    --turmeric:#E8A93B;
-    --herb:#4F7942;
-    --line:rgba(36,21,18,0.12);
-    --shadow:0 10px 30px rgba(36,21,18,0.18);
+    --char:#3B1F2B;
+    --char-2:#4E2A3B;
+    --cream:#FFF5F8;
+    --cream-dim:#FBE7EF;
+    --chili:#E0688A;
+    --chili-dark:#C24D6E;
+    --turmeric:#F2A6C1;
+    --herb:#B5678A;
+    --line:rgba(59,31,43,0.12);
+    --shadow:0 10px 30px rgba(59,31,43,0.18);
     --radius:14px;
   }
   *{box-sizing:border-box;}
@@ -443,6 +443,93 @@
     flex-wrap:wrap;
   }
   .history-toolbar .tabs{margin-bottom:0;}
+  .history-toolbar-right{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .clear-history-btn{
+    border:1.5px solid var(--chili);
+    background:transparent;
+    color:var(--chili);
+    padding:8px 12px;
+    border-radius:8px;
+    font-weight:800;
+    font-size:12px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .clear-history-btn:hover{background:rgba(224,104,138,0.1);}
+  .confirm-modal{max-width:420px;}
+  .confirm-warning{
+    background:rgba(224,104,138,0.1);
+    border:1px solid var(--chili);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:13px;
+    color:var(--char);
+    margin-top:14px;
+    line-height:1.5;
+  }
+  .confirm-warning b{color:var(--chili-dark);}
+  .confirm-actions{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .btn-secondary-solid{
+    flex:1;
+    padding:12px;
+    border-radius:10px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    color:var(--char);
+    font-weight:800;
+    font-size:13.5px;
+    cursor:pointer;
+  }
+  .btn-secondary-solid:hover{background:var(--cream-dim);}
+  .btn-danger{
+    flex:1;
+    padding:12px;
+    border-radius:10px;
+    border:none;
+    background:var(--chili);
+    color:#fff;
+    font-weight:800;
+    font-size:13.5px;
+    cursor:pointer;
+    box-shadow:0 3px 0 var(--chili-dark);
+  }
+  .btn-danger:disabled{
+    background:#d9b8c4;
+    box-shadow:none;
+    cursor:not-allowed;
+  }
+  .btn-danger:not(:disabled):active{transform:translateY(3px); box-shadow:none;}
+  #confirmClearOverlay{z-index:150;}
+  .history-summary{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:10px;
+    margin-top:16px;
+  }
+  .summary-card{
+    background:var(--char);
+    color:var(--cream);
+    border-radius:12px;
+    padding:12px 14px;
+  }
+  .summary-card .slabel{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:rgba(255,245,248,0.6);
+    font-weight:700;
+  }
+  .summary-card .sval{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    font-size:19px;
+    margin-top:4px;
+    color:var(--turmeric);
+  }
   #historySearch{
     padding:8px 12px;
     border-radius:8px;
@@ -450,7 +537,7 @@
     font-family:'Nunito Sans',sans-serif;
     font-size:13px;
     background:#fff;
-    min-width:200px;
+    min-width:180px;
   }
   .order-row{
     display:flex;
@@ -823,12 +910,39 @@
         <button class="close-x" id="closeHistory">✕</button>
       </div>
 
+      <div class="history-summary" id="historySummary"></div>
+
       <div class="history-toolbar">
         <div class="tabs" id="historyTabs"></div>
-        <input type="text" id="historySearch" placeholder="Cari nama pemesan...">
+        <div class="history-toolbar-right">
+          <input type="text" id="historySearch" placeholder="Cari nama pemesan...">
+          <button class="clear-history-btn" id="clearHistoryBtn">🗑️ Hapus Semua</button>
+        </div>
       </div>
 
       <div class="manage-list" id="historyList"></div>
+    </div>
+  </div>
+
+  <!-- Confirm delete-all history modal -->
+  <div class="overlay" id="confirmClearOverlay">
+    <div class="modal confirm-modal">
+      <div class="modal-head">
+        <div>
+          <h2>Hapus Semua Riwayat?</h2>
+          <p>Tindakan ini tidak bisa dibatalkan. Semua data pesanan (lunas maupun belum bayar) akan hilang permanen.</p>
+        </div>
+        <button class="close-x" id="closeConfirmClear">✕</button>
+      </div>
+      <div class="confirm-warning" id="confirmClearInfo"></div>
+      <div class="field" style="margin-top:14px;">
+        <label>Ketik <b>HAPUS</b> untuk konfirmasi</label>
+        <input type="text" id="confirmClearInput" placeholder="HAPUS" autocomplete="off" autocapitalize="characters">
+      </div>
+      <div class="confirm-actions">
+        <button class="btn-secondary-solid" id="cancelClearBtn">Batal</button>
+        <button class="btn-danger" id="confirmClearBtn" disabled>🗑️ Hapus Permanen</button>
+      </div>
     </div>
   </div>
 
@@ -1279,6 +1393,7 @@ document.getElementById('openHistory').addEventListener('click', ()=>{
   historyFilter = 'Semua';
   document.getElementById('historySearch').value = '';
   renderHistoryTabs();
+  renderHistorySummary();
   renderHistoryList();
   document.getElementById('historyOverlay').classList.add('open');
 });
@@ -1289,6 +1404,59 @@ document.getElementById('historyOverlay').addEventListener('click', (e)=>{
   if(e.target.id === 'historyOverlay') document.getElementById('historyOverlay').classList.remove('open');
 });
 document.getElementById('historySearch').addEventListener('input', renderHistoryList);
+
+document.getElementById('clearHistoryBtn').addEventListener('click', ()=>{
+  if(!orders.length){ showToast('Riwayat sudah kosong'); return; }
+  const paidCount = orders.filter(o=>o.status==='paid').length;
+  const pendingCount = orders.filter(o=>o.status==='pending').length;
+  const totalRevenue = orders.filter(o=>o.status==='paid').reduce((s,o)=>s+o.total,0);
+  document.getElementById('confirmClearInfo').innerHTML =
+    `Yang akan dihapus: <b>${orders.length} pesanan</b> (${paidCount} lunas, ${pendingCount} belum bayar), termasuk catatan pendapatan <b>${rupiah(totalRevenue)}</b>.`;
+  document.getElementById('confirmClearInput').value = '';
+  document.getElementById('confirmClearBtn').disabled = true;
+  document.getElementById('confirmClearOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('confirmClearInput').focus(), 50);
+});
+
+document.getElementById('confirmClearInput').addEventListener('input', (e)=>{
+  document.getElementById('confirmClearBtn').disabled = e.target.value.trim().toUpperCase() !== 'HAPUS';
+});
+
+function closeConfirmClear(){
+  document.getElementById('confirmClearOverlay').classList.remove('open');
+}
+document.getElementById('closeConfirmClear').addEventListener('click', closeConfirmClear);
+document.getElementById('cancelClearBtn').addEventListener('click', closeConfirmClear);
+document.getElementById('confirmClearOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'confirmClearOverlay') closeConfirmClear();
+});
+
+document.getElementById('confirmClearBtn').addEventListener('click', ()=>{
+  orders = [];
+  saveOrders(orders);
+  renderHistorySummary();
+  renderHistoryList();
+  updatePendingBadge();
+  closeConfirmClear();
+  showToast('Semua riwayat pesanan dihapus');
+});
+
+function renderHistorySummary(){
+  const wrap = document.getElementById('historySummary');
+  const paidOrders = orders.filter(o=>o.status==='paid');
+  const pendingCount = orders.filter(o=>o.status==='pending').length;
+  const totalRevenue = paidOrders.reduce((s,o)=>s+o.total, 0);
+  wrap.innerHTML = `
+    <div class="summary-card">
+      <div class="slabel">Total Pesanan</div>
+      <div class="sval">${orders.length}</div>
+    </div>
+    <div class="summary-card">
+      <div class="slabel">Total Pendapatan (Lunas)</div>
+      <div class="sval">${rupiah(totalRevenue)}</div>
+    </div>
+  `;
+}
 
 function renderHistoryTabs(){
   const wrap = document.getElementById('historyTabs');
@@ -1363,6 +1531,7 @@ function renderHistoryList(){
       if(confirm('Hapus riwayat pesanan ini?')){
         orders = orders.filter(o=>o.id!==id);
         saveOrders(orders);
+        renderHistorySummary();
         renderHistoryList();
         updatePendingBadge();
         showToast('Riwayat pesanan dihapus');
@@ -1398,6 +1567,7 @@ function payPendingOrder(id){
   o.paidAt = Date.now();
   o.paidAmount = paid > 0 ? paid : null;
   saveOrders(orders);
+  renderHistorySummary();
   renderHistoryList();
   updatePendingBadge();
   lastPaidOrder = o;
